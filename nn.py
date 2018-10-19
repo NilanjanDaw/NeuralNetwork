@@ -3,7 +3,7 @@
 # @Email:  nilanjandaw@gmail.com
 # @Filename: nn.py
 # @Last modified by:   nilanjan
-# @Last modified time: 2018-10-19T22:56:40+05:30
+# @Last modified time: 2018-10-20T02:56:10+05:30
 # @Copyright: Nilanjan Daw
 import numpy as np
 import pandas as pd
@@ -18,8 +18,17 @@ lambda_regularizer = 4500
 error_rate = 0.00000001
 
 
+def init(input, num_hidden_layer, num_hidden_nodes, output):
+    np.random.seed(99)
+    hidden_layers = np.random.random_sample((num_hidden_layer - 1, num_hidden_nodes, num_hidden_nodes))
+    input_layer = np.random.random_sample((input, num_hidden_nodes))
+    output_layer = np.random.random_sample((num_hidden_nodes, output))
+    bias_hidden = np.random.random_sample((num_hidden_layer, num_hidden_nodes))
+    bias_output = np.random.random_sample((output,))
+    return input_layer, hidden_layers, output_layer, bias_hidden, bias_output
+
+
 def normalisation(data):
-    print(data.mean(), data.std())
     return (data - data.mean()) / data.std()
 
 
@@ -85,6 +94,38 @@ def read_data_test(file_path):
         print("file not found")
 
 
+def sigmoid(data):
+    return 1 / (1 + np.exp(-data))
+
+
+def sigmoid_dx(data):
+    return sigmoid(data) * (1 - sigmoid(data))
+
+
+def train_network(x_train, y_train, x_validate, y_validate):
+
+    num_hidden_layer = 1
+    num_hidden_nodes = 100
+    num_classes = 3
+
+    input_layer, hidden_layers, output_layer, bias_hidden, bias_output = \
+                                    init(np.shape(x_train[0])[0],
+                                    num_hidden_layer, num_hidden_nodes, num_classes)
+    x = np.add(np.dot(x_train[0], input_layer), bias_hidden[0])
+    x = sigmoid(x)
+    print(x)
+    for index in range(num_hidden_layer - 1):
+        print(np.shape(x))
+        x = np.add(np.dot(x, hidden_layers[index]), bias_hidden[index + 1])
+        x = sigmoid(x)
+        print(x)
+    print(np.shape(x))
+    x = np.add(np.dot(x, output_layer), bias_output)
+    x = sigmoid(x)
+    print(x)
+    return 0
+
+
 def main():
     global learning_rate, lambda_regularizer
     parser = argparse.ArgumentParser()
@@ -109,6 +150,7 @@ def main():
     print("train_data", number_of_samples, number_of_features)
     x_test = read_data_test(args.test)
     print("test_data", np.shape(x_test))
+    train_network(x_train, y_train, x_validate, y_validate)
     # test_data = test(x_test, weight)
     #
     # i = 0
