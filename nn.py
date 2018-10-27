@@ -114,11 +114,16 @@ def cross_entropy(predicted, true_label):
 def del_output(predicted, true_label):
     return predicted - true_label
 
-def update_weight(input_layer, hidden_layers, output_layer, delta_loss, activations):
-    input_layer -= learning_rate * delta_loss[0] * activations[0]
-    output_layer
+def update_weight(layers, delta_loss, activations):
+    global learning_rate
+    for index in range(len(layers)):
+        del_error = np.dot(delta_loss[index], np.asarray(activations[index]))
+        # print("del_error", np.shape(del_error), learning_rate)
+        del_error = learning_rate * np.array(del_error)
+        layers[index] -= del_error.T
+    return layers
 
-def back_propagation(x, true_label, layers, bias_hidden, bias_output):
+def back_propagation(x, true_label, layers, bias):
     num_hidden_layer = 1
     num_hidden_nodes = 100
     num_classes = 3
@@ -126,42 +131,34 @@ def back_propagation(x, true_label, layers, bias_hidden, bias_output):
     activations = []
     z_list = []
     delta_loss = []
-
     activations = [x]
-    x = np.add(np.dot(activations[0], layers[0]), bias_hidden[0])
-    z_list.append(x)
-    x = sigmoid(x)
-    activations.append(x)
-    # print(x)
-    for index in range(num_hidden_layer - 1):
-        print(np.shape(x))
-        x = np.add(np.dot(activations[index - 1], hidden_layers[index]), bias_hidden[index + 1])
+
+    for index in range(len(layers)):
+        x = np.add(np.dot(activations[index], layers[index]), bias[index])
         z_list.append(x)
         x = sigmoid(x)
         activations.append(x)
-        # print(x)
-    # print(np.shape(x))
-    x = np.add(np.dot(activations[-1], output_layer), bias_output)
-    z_list.append(x)
-    x = sigmoid(x)
-    activations.append(x)
-    cross_entropy_loss = cross_entropy(x, true_label)
+    cross_entropy_loss = cross_entropy(activations[-1], true_label)
 
-    delta_loss.insert(0, del_output(activations[-1], true_label))
-    print("activation", np.shape(activations[-2]))
-    print(np.shape(del_output(activations[-1], true_label)))
-    print("output delta loss", np.shape(delta_loss[-1]))    
-    # for index in range(num_hidden_layer - 1, 0):
-    #     delta_layer_loss = delta_loss[-index] * activations[index] * (np.ones(np.shape(activations[index]) - activations[index]))
-    #     delta_loss.insert(0, delta_layer_loss)
-    delta_sigmoid = sigmoid_dx(activations[0])
-    print("sigmoid", np.shape(delta_sigmoid), "output_layer", np.shape(output_layer.T))
-    delta_input_layer_loss = output_layer * np.asmatrix(delta_loss[0]).T
-    delta_loss.insert(0, delta_input_layer_loss.T)
+    delta_loss.insert(0, del_output(activations[-1], true_label).T)
+    # print("activation", np.shape(activations[-2]))
 
-    update_weight(input_layer, hidden_layers, output_layer, delta_loss, activations)
-    return cross_entropy_loss
+    for index in range(1, len(layers) - 1):
+        x = 0 #TODO: extra hidden
+    input_layer_loss = layers[1] * np.asmatrix(delta_loss[0])
+    delta_loss.insert(0, input_layer_loss)
+    layers = update_weight(layers, delta_loss, activations)
+    return -cross_entropy_loss, layers
 
+
+def unison_shuffled(a, b):
+    p = np.random.permutation(len(a))
+    return a[p], b[p]
+
+def plot_fig(data):
+    x = np.arange(len(data))
+    plt.plot(x, data)
+    plt.show()
 
 def train_network(x_train, y_train, x_validate, y_validate):
 
@@ -169,25 +166,27 @@ def train_network(x_train, y_train, x_validate, y_validate):
     num_hidden_nodes = 100
     num_classes = 3
 
-
-    
-
     input_layer, hidden_layers, output_layer, bias_hidden, bias_output = \
                                     init(np.shape(x_train[0])[0],
                                     num_hidden_layer, num_hidden_nodes, num_classes)
 
     print(np.shape(input_layer), np.shape(hidden_layers), np.shape(output_layer))
     layers = []
+    bias = []
     layers.append(input_layer)
     if (num_hidden_layer > 1):
         layers.append(hidden_layers)    
     layers.append(output_layer)
+    bias.append(bias_hidden)
+    bias.append(bias_output)
     loss = []
     print(np.shape(layers))
-    for i in range(batch_size):
-        loss.append(back_propagation(x_train[i], y_train[i], layers, bias_hidden, bias_output))
-    print(loss)
-    print(-np.mean(loss))
+    for i in range(1000):
+        unison_shuffled(x_train, y_train)
+        loss_i, layers = back_propagation(x_train[0:100], y_train[0:100], layers, bias)
+        print("Iteration", i, "loss", loss_i)
+        loss.append(loss_i)
+    plot_fig(loss)
     return 0
 
 
@@ -201,7 +200,7 @@ def main():
     parser.add_argument('--test', dest='test', type=str)
     args = parser.parse_args()
 
-    learning_rate = args.learning_rate
+    learning_rate = args.learning_rate if args.learning_rate is not None else learning_rate
     lambda_regularizer = args.lambda_rate
 
     x_train, y_train = read_data_train(args.train)
