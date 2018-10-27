@@ -16,7 +16,7 @@ learning_rate = 0.0001
 lambda_regularizer = 4500
 
 error_rate = 0.00000001
-batch_size = 100
+batch_size = 1
 epsilon = 1e-12
 
 def init(input, num_hidden_layer, num_hidden_nodes, output):
@@ -100,41 +100,92 @@ def sigmoid(data):
 
 
 def sigmoid_dx(data):
-    return sigmoid(data) * (1 - sigmoid(data))
+    data = np.asarray(data)
+    return data * (np.ones(np.shape(data)) - data)
 
 
 def cross_entropy(predicted, true_label):
     loss = np.nan_to_num(true_label * np.log(predicted) + (1 - true_label) * np.log(1 - predicted))
-    print(loss)
+    # print(loss)
     loss = np.sum(loss)
-    print(predicted, true_label, loss)
+    # print(predicted, true_label, loss)
     return loss
+
+def del_output(predicted, true_label):
+    return predicted - true_label
+
+def update_weight(input_layer, hidden_layers, output_layer, delta_loss, activations):
+    input_layer -= learning_rate * delta_loss[0] * activations[0]
+    output_layer
+
+def back_propagation(x, true_label, layers, bias_hidden, bias_output):
+    num_hidden_layer = 1
+    num_hidden_nodes = 100
+    num_classes = 3
+
+    activations = []
+    z_list = []
+    delta_loss = []
+
+    activations = [x]
+    x = np.add(np.dot(activations[0], layers[0]), bias_hidden[0])
+    z_list.append(x)
+    x = sigmoid(x)
+    activations.append(x)
+    # print(x)
+    for index in range(num_hidden_layer - 1):
+        print(np.shape(x))
+        x = np.add(np.dot(activations[index - 1], hidden_layers[index]), bias_hidden[index + 1])
+        z_list.append(x)
+        x = sigmoid(x)
+        activations.append(x)
+        # print(x)
+    # print(np.shape(x))
+    x = np.add(np.dot(activations[-1], output_layer), bias_output)
+    z_list.append(x)
+    x = sigmoid(x)
+    activations.append(x)
+    cross_entropy_loss = cross_entropy(x, true_label)
+
+    delta_loss.insert(0, del_output(activations[-1], true_label))
+    print("activation", np.shape(activations[-2]))
+    print(np.shape(del_output(activations[-1], true_label)))
+    print("output delta loss", np.shape(delta_loss[-1]))    
+    # for index in range(num_hidden_layer - 1, 0):
+    #     delta_layer_loss = delta_loss[-index] * activations[index] * (np.ones(np.shape(activations[index]) - activations[index]))
+    #     delta_loss.insert(0, delta_layer_loss)
+    delta_sigmoid = sigmoid_dx(activations[0])
+    print("sigmoid", np.shape(delta_sigmoid), "output_layer", np.shape(output_layer.T))
+    delta_input_layer_loss = output_layer * np.asmatrix(delta_loss[0]).T
+    delta_loss.insert(0, delta_input_layer_loss.T)
+
+    update_weight(input_layer, hidden_layers, output_layer, delta_loss, activations)
+    return cross_entropy_loss
+
 
 def train_network(x_train, y_train, x_validate, y_validate):
 
     num_hidden_layer = 1
     num_hidden_nodes = 100
     num_classes = 3
+
+
+    
+
     input_layer, hidden_layers, output_layer, bias_hidden, bias_output = \
                                     init(np.shape(x_train[0])[0],
                                     num_hidden_layer, num_hidden_nodes, num_classes)
+
     print(np.shape(input_layer), np.shape(hidden_layers), np.shape(output_layer))
-    loss = np.zeros(batch_size)
+    layers = []
+    layers.append(input_layer)
+    if (num_hidden_layer > 1):
+        layers.append(hidden_layers)    
+    layers.append(output_layer)
+    loss = []
+    print(np.shape(layers))
     for i in range(batch_size):
-        x = np.add(np.dot(x_train[i], input_layer), bias_hidden[0])
-        x = sigmoid(x)
-        # print(x)
-        for index in range(num_hidden_layer - 1):
-            print(np.shape(x))
-            x = np.add(np.dot(x, hidden_layers[index]), bias_hidden[index + 1])
-            x = sigmoid(x)
-            # print(x)
-        # print(np.shape(x))
-        x = np.add(np.dot(x, output_layer), bias_output)
-        x = sigmoid(x)
-        print(x)
-        cross_entropy_loss = cross_entropy(x, y_train[i])
-        loss[i] = cross_entropy_loss
+        loss.append(back_propagation(x_train[i], y_train[i], layers, bias_hidden, bias_output))
     print(loss)
     print(-np.mean(loss))
     return 0
