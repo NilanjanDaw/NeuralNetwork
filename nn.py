@@ -3,7 +3,7 @@
 # @Email:  nilanjandaw@gmail.com
 # @Filename: nn.py
 # @Last modified by:   nilanjan
-# @Last modified time: 2018-10-20T02:56:10+05:30
+# @Last modified time: 2018-10-21T02:47:34+05:30
 # @Copyright: Nilanjan Daw
 import numpy as np
 import pandas as pd
@@ -16,15 +16,16 @@ learning_rate = 0.0001
 lambda_regularizer = 4500
 
 error_rate = 0.00000001
-
+batch_size = 100
+epsilon = 1e-12
 
 def init(input, num_hidden_layer, num_hidden_nodes, output):
     np.random.seed(99)
-    hidden_layers = np.random.random_sample((num_hidden_layer - 1, num_hidden_nodes, num_hidden_nodes))
-    input_layer = np.random.random_sample((input, num_hidden_nodes))
-    output_layer = np.random.random_sample((num_hidden_nodes, output))
-    bias_hidden = np.random.random_sample((num_hidden_layer, num_hidden_nodes))
-    bias_output = np.random.random_sample((output,))
+    hidden_layers = np.random.random_sample((num_hidden_layer - 1, num_hidden_nodes, num_hidden_nodes)) - 0.5
+    input_layer = np.random.random_sample((input, num_hidden_nodes)) - 0.5
+    output_layer = np.random.random_sample((num_hidden_nodes, output)) - 0.5
+    bias_hidden = np.random.random_sample((num_hidden_layer, num_hidden_nodes)) - 0.5
+    bias_output = np.random.random_sample((output,)) - 0.5
     return input_layer, hidden_layers, output_layer, bias_hidden, bias_output
 
 
@@ -43,7 +44,7 @@ def read_data_train(file_path):
 
         # plot(data)
 
-        y_train = data.loc[:, "target"]
+        y_train = pd.get_dummies(data["target"], prefix="target")
         basetime_day = pd.get_dummies(
             data["basetime_day"], prefix='basetime_day')
         post_day = pd.get_dummies(data["post_day"], prefix="post_day")
@@ -102,27 +103,40 @@ def sigmoid_dx(data):
     return sigmoid(data) * (1 - sigmoid(data))
 
 
+def cross_entropy(predicted, true_label):
+    loss = np.nan_to_num(true_label * np.log(predicted) + (1 - true_label) * np.log(1 - predicted))
+    print(loss)
+    loss = np.sum(loss)
+    print(predicted, true_label, loss)
+    return loss
+
 def train_network(x_train, y_train, x_validate, y_validate):
 
     num_hidden_layer = 1
     num_hidden_nodes = 100
     num_classes = 3
-
     input_layer, hidden_layers, output_layer, bias_hidden, bias_output = \
                                     init(np.shape(x_train[0])[0],
                                     num_hidden_layer, num_hidden_nodes, num_classes)
-    x = np.add(np.dot(x_train[0], input_layer), bias_hidden[0])
-    x = sigmoid(x)
-    print(x)
-    for index in range(num_hidden_layer - 1):
-        print(np.shape(x))
-        x = np.add(np.dot(x, hidden_layers[index]), bias_hidden[index + 1])
+    print(np.shape(input_layer), np.shape(hidden_layers), np.shape(output_layer))
+    loss = np.zeros(batch_size)
+    for i in range(batch_size):
+        x = np.add(np.dot(x_train[i], input_layer), bias_hidden[0])
+        x = sigmoid(x)
+        # print(x)
+        for index in range(num_hidden_layer - 1):
+            print(np.shape(x))
+            x = np.add(np.dot(x, hidden_layers[index]), bias_hidden[index + 1])
+            x = sigmoid(x)
+            # print(x)
+        # print(np.shape(x))
+        x = np.add(np.dot(x, output_layer), bias_output)
         x = sigmoid(x)
         print(x)
-    print(np.shape(x))
-    x = np.add(np.dot(x, output_layer), bias_output)
-    x = sigmoid(x)
-    print(x)
+        cross_entropy_loss = cross_entropy(x, y_train[i])
+        loss[i] = cross_entropy_loss
+    print(loss)
+    print(-np.mean(loss))
     return 0
 
 
