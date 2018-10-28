@@ -3,28 +3,32 @@
 # @Email:  nilanjandaw@gmail.com
 # @Filename: nn.py
 # @Last modified by:   nilanjan
-# @Last modified time: 2018-10-21T02:47:34+05:30
+# @Last modified time: 2018-10-28T22:05:28+05:30
 # @Copyright: Nilanjan Daw
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import argparse
 import os
+import csv
 
 iterations = 500000
 learning_rate = 0.0001
 lambda_regularizer = 4500
 
 error_rate = 0.00000001
-batch_size = 1
+batch_size = 100
 epsilon = 1e-12
+
 
 def init(input, num_hidden_layer, num_hidden_nodes, output):
     np.random.seed(99)
-    hidden_layers = np.random.random_sample((num_hidden_layer - 1, num_hidden_nodes, num_hidden_nodes)) - 0.5
+    hidden_layers = np.random.random_sample(
+        (num_hidden_layer - 1, num_hidden_nodes, num_hidden_nodes)) - 0.5
     input_layer = np.random.random_sample((input, num_hidden_nodes)) - 0.5
     output_layer = np.random.random_sample((num_hidden_nodes, output)) - 0.5
-    bias_hidden = np.random.random_sample((num_hidden_layer, num_hidden_nodes)) - 0.5
+    bias_hidden = np.random.random_sample(
+        (num_hidden_layer, num_hidden_nodes)) - 0.5
     bias_output = np.random.random_sample((output,)) - 0.5
     return input_layer, hidden_layers, output_layer, bias_hidden, bias_output
 
@@ -101,52 +105,57 @@ def sigmoid(data):
 
 def sigmoid_dx(data):
     data = np.asarray(data)
-    return data * (np.ones(np.shape(data)) - data)
+    return data * (1 - data)
 
 
 def cross_entropy(predicted, true_label):
-    loss = np.nan_to_num(true_label * np.log(predicted) + (1 - true_label) * np.log(1 - predicted))
-    # print(loss)
-    loss = np.sum(loss)
-    # print(predicted, true_label, loss)
-    return loss
+    loss = np.nan_to_num(true_label * np.log(predicted)
+                         + (1 - true_label) * np.log(1 - predicted))
+    return np.mean(loss)
+
 
 def del_output(predicted, true_label):
     return predicted - true_label
 
+
 def update_weight(layers, delta_loss, activations):
     global learning_rate
-    for index in range(len(layers)):
+    for index in reversed(range(len(layers))):
         del_error = np.dot(delta_loss[index], np.asarray(activations[index]))
-        # print("del_error", np.shape(del_error), learning_rate)
         del_error = learning_rate * np.array(del_error)
         layers[index] -= del_error.T
     return layers
 
+
+def ps(name, data):
+    print(name, np.shape(data))
+
+
 def back_propagation(x, true_label, layers, bias):
-    num_hidden_layer = 1
-    num_hidden_nodes = 100
-    num_classes = 3
 
     activations = []
     z_list = []
     delta_loss = []
     activations = [x]
-
     for index in range(len(layers)):
-        x = np.add(np.dot(activations[index], layers[index]), bias[index])
+        x = np.dot(activations[index], layers[index])
         z_list.append(x)
         x = sigmoid(x)
         activations.append(x)
+
+    for index in range(len(activations)):
+        activations[index] = np.squeeze(activations[index])
+
     cross_entropy_loss = cross_entropy(activations[-1], true_label)
 
     delta_loss.insert(0, del_output(activations[-1], true_label).T)
-    # print("activation", np.shape(activations[-2]))
+    for index in reversed(range(len(layers) - 1)):
+        del_sigmoid = sigmoid_dx(activations[index + 1])
+        hidden_layer_loss = np.dot(np.asmatrix(
+            layers[index + 1]), delta_loss[0])
+        hidden_layer_loss = hidden_layer_loss * del_sigmoid
+        delta_loss.insert(0, hidden_layer_loss)
 
-    for index in range(1, len(layers) - 1):
-        x = 0 #TODO: extra hidden
-    input_layer_loss = layers[1] * np.asmatrix(delta_loss[0])
-    delta_loss.insert(0, input_layer_loss)
     layers = update_weight(layers, delta_loss, activations)
     return -cross_entropy_loss, layers
 
@@ -155,10 +164,12 @@ def unison_shuffled(a, b):
     p = np.random.permutation(len(a))
     return a[p], b[p]
 
+
 def plot_fig(data):
     x = np.arange(len(data))
     plt.plot(x, data)
     plt.show()
+
 
 def train_network(x_train, y_train, x_validate, y_validate):
 
@@ -167,27 +178,40 @@ def train_network(x_train, y_train, x_validate, y_validate):
     num_classes = 3
 
     input_layer, hidden_layers, output_layer, bias_hidden, bias_output = \
-                                    init(np.shape(x_train[0])[0],
-                                    num_hidden_layer, num_hidden_nodes, num_classes)
+        init(np.shape(x_train[0])[0],
+             num_hidden_layer, num_hidden_nodes, num_classes)
 
-    print(np.shape(input_layer), np.shape(hidden_layers), np.shape(output_layer))
+    print(np.shape(input_layer), np.shape(
+        hidden_layers), np.shape(output_layer))
     layers = []
     bias = []
     layers.append(input_layer)
     if (num_hidden_layer > 1):
-        layers.append(hidden_layers)    
+        for hidden_layer in hidden_layers:
+            layers.append(hidden_layer)
     layers.append(output_layer)
     bias.append(bias_hidden)
     bias.append(bias_output)
     loss = []
     print(np.shape(layers))
     for i in range(1000):
-        unison_shuffled(x_train, y_train)
-        loss_i, layers = back_propagation(x_train[0:100], y_train[0:100], layers, bias)
+        x_train, y_train = unison_shuffled(x_train, y_train)
+        loss_i, layers = back_propagation(
+            x_train[0:batch_size, :], y_train[0:batch_size, :], layers, bias)
         print("Iteration", i, "loss", loss_i)
         loss.append(loss_i)
-    plot_fig(loss)
-    return 0
+
+    return loss, layers
+
+
+def test(x_test, layers):
+    x = x_test
+    for index in range(len(layers)):
+        x = np.dot(x, layers[index])
+        x = sigmoid(x)
+    x = np.argmax(x, axis=1) + 1
+    print(x)
+    return x
 
 
 def main():
@@ -214,18 +238,18 @@ def main():
     print("train_data", number_of_samples, number_of_features)
     x_test = read_data_test(args.test)
     print("test_data", np.shape(x_test))
-    train_network(x_train, y_train, x_validate, y_validate)
-    # test_data = test(x_test, weight)
-    #
-    # i = 0
-    # with open('submission.csv', 'w') as file:
-    #     fieldNames = ["Id", "target"]
-    #     writer = csv.DictWriter(file, fieldNames)
-    #     writer.writeheader()
-    #     for row in test_data:
-    #         writer.writerow({"Id": str(i), "target": str(row)})
-    #         i = i + 1
+    loss, layers = train_network(x_train, y_train, x_validate, y_validate)
+    test_data = test(x_test, layers)
 
+    i = 1
+    with open('submission.csv', 'w') as file:
+        fieldNames = ["Id", "predicted_class"]
+        writer = csv.DictWriter(file, fieldNames)
+        writer.writeheader()
+        for row in test_data:
+            writer.writerow({"Id": str(i), "predicted_class": str(row)})
+            i = i + 1
+    plot_fig(loss)
     print("done")
 
 
