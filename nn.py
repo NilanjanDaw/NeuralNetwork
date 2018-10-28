@@ -3,7 +3,7 @@
 # @Email:  nilanjandaw@gmail.com
 # @Filename: nn.py
 # @Last modified by:   nilanjan
-# @Last modified time: 2018-10-28T22:05:28+05:30
+# @Last modified time: 2018-10-29T01:43:37+05:30
 # @Copyright: Nilanjan Daw
 import numpy as np
 import pandas as pd
@@ -12,9 +12,13 @@ import argparse
 import os
 import csv
 
-iterations = 500000
+iterations = 1000
 learning_rate = 0.0001
 lambda_regularizer = 4500
+
+num_hidden_layers = 1
+num_hidden_nodes = 100
+num_classes = 3
 
 error_rate = 0.00000001
 batch_size = 100
@@ -24,7 +28,7 @@ epsilon = 1e-12
 def init(input, num_hidden_layer, num_hidden_nodes, output):
     np.random.seed(99)
     hidden_layers = np.random.random_sample(
-        (num_hidden_layer - 1, num_hidden_nodes, num_hidden_nodes)) - 0.5
+        (num_hidden_layers - 1, num_hidden_nodes, num_hidden_nodes)) - 0.5
     input_layer = np.random.random_sample((input, num_hidden_nodes)) - 0.5
     output_layer = np.random.random_sample((num_hidden_nodes, output)) - 0.5
     bias_hidden = np.random.random_sample(
@@ -47,7 +51,7 @@ def read_data_train(file_path):
                                   "h_target", "post_day", "basetime_day", "target"])
 
         # plot(data)
-
+        data = data.sample(frac=1).reset_index(drop=True)
         y_train = pd.get_dummies(data["target"], prefix="target")
         basetime_day = pd.get_dummies(
             data["basetime_day"], prefix='basetime_day')
@@ -131,17 +135,43 @@ def ps(name, data):
     print(name, np.shape(data))
 
 
+def forward_pass(activations, layers):
+
+    for index in range(len(layers)):
+        x = np.dot(activations[index], layers[index])
+        x = sigmoid(x)
+        activations.append(x)
+
+    return activations
+
+
+def accuracy_calculate(predicted, true_label):
+    predicted = np.argmax(predicted, axis=1) + 1
+    true_label = np.argmax(true_label, axis=1) + 1
+    acc = np.count_nonzero(predicted == true_label) / len(true_label)
+    return acc
+
+
+def evaluate(layers, x, y=None):
+
+    for index in range(len(layers)):
+        x = np.dot(x, layers[index])
+        x = sigmoid(x)
+
+    if y is not None:
+        cross_entropy_loss = cross_entropy(x, y)
+        accuracy = accuracy_calculate(x, y)
+        return x, -cross_entropy_loss, accuracy
+    return x
+
+
 def back_propagation(x, true_label, layers, bias):
 
     activations = []
-    z_list = []
     delta_loss = []
     activations = [x]
-    for index in range(len(layers)):
-        x = np.dot(activations[index], layers[index])
-        z_list.append(x)
-        x = sigmoid(x)
-        activations.append(x)
+
+    activations = forward_pass(activations, layers)
 
     for index in range(len(activations)):
         activations[index] = np.squeeze(activations[index])
@@ -165,43 +195,59 @@ def unison_shuffled(a, b):
     return a[p], b[p]
 
 
-def plot_fig(data):
+def plot_fig(data, label):
     x = np.arange(len(data))
     plt.plot(x, data)
+    plt.title(label=label)
     plt.show()
+
+
+def adagrad(loss_validate, validation_loss):
+    global learning_rate
+    decay_rate = 0.01
+    loss_validate = np.asarray(loss_validate)
+    loss_validate = decay_rate * np.sum(validation_loss ** 2)
+    learning_rate += - learning_rate * validation_loss / (np.sqrt(loss_validate) + 0.000001)
 
 
 def train_network(x_train, y_train, x_validate, y_validate):
 
-    num_hidden_layer = 1
-    num_hidden_nodes = 100
-    num_classes = 3
-
+    print(num_hidden_layers)
     input_layer, hidden_layers, output_layer, bias_hidden, bias_output = \
         init(np.shape(x_train[0])[0],
-             num_hidden_layer, num_hidden_nodes, num_classes)
+             num_hidden_layers, num_hidden_nodes, num_classes)
 
     print(np.shape(input_layer), np.shape(
         hidden_layers), np.shape(output_layer))
     layers = []
     bias = []
     layers.append(input_layer)
-    if (num_hidden_layer > 1):
+    if (num_hidden_layers > 1):
         for hidden_layer in hidden_layers:
             layers.append(hidden_layer)
     layers.append(output_layer)
     bias.append(bias_hidden)
     bias.append(bias_output)
-    loss = []
+    loss_train = []
+    loss_validate = []
+    acc_validate = []
     print(np.shape(layers))
-    for i in range(1000):
+    for i in range(iterations):
         x_train, y_train = unison_shuffled(x_train, y_train)
-        loss_i, layers = back_propagation(
+        loss_train_i, layers = back_propagation(
             x_train[0:batch_size, :], y_train[0:batch_size, :], layers, bias)
-        print("Iteration", i, "loss", loss_i)
-        loss.append(loss_i)
+        print("Iteration", i, "loss", loss_train_i)
 
-    return loss, layers
+        loss_train.append(loss_train_i)
+        eval, validation_loss, validation_acc = \
+            evaluate(layers, x_validate, y_validate)
+        loss_validate.append(validation_loss)
+        acc_validate.append(validation_acc)
+        # adagrad(loss_validate, validation_loss)
+    plot_fig(loss_train, label="train_loss")
+    plot_fig(acc_validate, label="validation_acc")
+    plot_fig(loss_validate, label="validation_loss")
+    return loss_train, layers
 
 
 def test(x_test, layers):
@@ -215,17 +261,24 @@ def test(x_test, layers):
 
 
 def main():
-    global learning_rate, lambda_regularizer
+    global learning_rate, lambda_regularizer, num_hidden_layers, num_hidden_nodes
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--lambda', dest='lambda_rate', type=float)
     parser.add_argument('--alpha', dest='learning_rate', type=float)
+    parser.add_argument('--num_hidden_layers',
+                        dest='num_hidden_layers', type=float)
+    parser.add_argument('--num_hidden_nodes',
+                        dest='num_hidden_nodes', type=float)
     parser.add_argument('--train', dest='train', type=str)
     parser.add_argument('--test', dest='test', type=str)
     args = parser.parse_args()
 
-    learning_rate = args.learning_rate if args.learning_rate is not None else learning_rate
+    learning_rate = args.learning_rate if args.learning_rate is not None \
+        else learning_rate
     lambda_regularizer = args.lambda_rate
+    num_hidden_layers = int(args.num_hidden_layers)
+    num_hidden_nodes = int(args.num_hidden_nodes)
 
     x_train, y_train = read_data_train(args.train)
     x_validate = x_train[25600:, :]
@@ -249,7 +302,6 @@ def main():
         for row in test_data:
             writer.writerow({"Id": str(i), "predicted_class": str(row)})
             i = i + 1
-    plot_fig(loss)
     print("done")
 
 
